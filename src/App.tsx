@@ -121,25 +121,20 @@ function App() {
 
   const handleLogout = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/logout`, {
+      await fetch(`${API_BASE_URL}/logout`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${token}v`,
         },
       });
-      const data = await response.json();
-      if (data.success) {
-        setToken(null);
-        setCustomer(null);
-        setMessage('Logout successful!');
-        setIsLoggedIn(false);
-      } else {
-        setMessage(data.error || 'Logout failed');
-      }
     } catch (error: any) {
-      setMessage(`Error during logout: ${error.message || 'An unknown error occurred.'}`);
-      console.error('Error during logout:', error);
+      console.error('Error during logout API call:', error);
+    } finally {
+      setToken(null);
+      setCustomer(null);
+      setMessage('Logout successful!');
+      setIsLoggedIn(false);
     }
   };
 
