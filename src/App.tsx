@@ -32,11 +32,27 @@ function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    if (token) {
+    const storedToken = localStorage.getItem('customer_token');
+    const storedCustomer = localStorage.getItem('customer');
+
+    if (storedToken && storedCustomer) {
+      setToken(storedToken);
+      setCustomer(JSON.parse(storedCustomer));
+      setIsLoggedIn(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (token && customer) {
+      localStorage.setItem('customer_token', token);
+      localStorage.setItem('customer', JSON.stringify(customer));
       fetchProducts();
       fetchStores();
+    } else {
+      localStorage.removeItem('customer_token');
+      localStorage.removeItem('customer');
     }
-  }, [token]);
+  }, [token, customer]);
 
   const fetchProducts = async () => {
     try {
