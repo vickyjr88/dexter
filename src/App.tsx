@@ -13,12 +13,21 @@ interface Store {
   name: string;
 }
 
+interface Customer {
+  customer_id: string;
+  firstname: string;
+  lastname: string;
+  email: string;
+  telephone: string;
+}
+
 function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [token, setToken] = useState<string | null>(null);
+  const [customer, setCustomer] = useState<Customer | null>(null);
   const [message, setMessage] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
@@ -78,9 +87,9 @@ function App() {
         body: JSON.stringify({ email, password }),
       });
       const data = await response.json();
-      console.log('Login response:', data);
       if (data.success) {
-        setToken(data.token);
+        setToken(data.customer_token);
+        setCustomer(data.customer);
         setMessage('Login successful!');
         setIsLoggedIn(true);
       } else {
@@ -106,6 +115,7 @@ function App() {
       const data = await response.json();
       if (data.success) {
         setToken(null);
+        setCustomer(null);
         setMessage('Logout successful!');
         setIsLoggedIn(false);
       } else {
@@ -119,7 +129,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
-      <h1 className="text-4xl font-bold text-blue-600 mb-8">OpenCart API Client</h1>
+      <h1 className="text-4xl font-bold text-blue-600 mb-8">Dexter</h1>
 
       {message && <p className="text-red-500 mb-4">{message}</p>}
 
@@ -157,8 +167,8 @@ function App() {
         </form>
       ) : (
         <div className="bg-white p-6 rounded shadow-md w-full max-w-md">
-          <h2 className="text-2xl font-semibold mb-4">Welcome!</h2>
-          <p className="mb-4">You are logged in. Your token: {token}</p>
+          <h2 className="text-2xl font-semibold mb-4">Welcome, {customer?.firstname}!</h2>
+          <p className="mb-4">You are logged in.</p>
           <button
             onClick={handleLogout}
             className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
