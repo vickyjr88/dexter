@@ -24,6 +24,7 @@ interface Customer {
 function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
+  const [selectedStore, setSelectedStore] = useState<Store | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [token, setToken] = useState<string | null>(null);
@@ -34,11 +35,16 @@ function App() {
   useEffect(() => {
     const storedToken = localStorage.getItem('customer_token');
     const storedCustomer = localStorage.getItem('customer');
+    const storedStore = localStorage.getItem('selected_store');
 
     if (storedToken && storedCustomer) {
       setToken(storedToken);
       setCustomer(JSON.parse(storedCustomer));
       setIsLoggedIn(true);
+    }
+
+    if (storedStore) {
+      setSelectedStore(JSON.parse(storedStore));
     }
   }, []);
 
@@ -53,6 +59,14 @@ function App() {
       localStorage.removeItem('customer');
     }
   }, [token, customer]);
+
+  useEffect(() => {
+    if (selectedStore) {
+      localStorage.setItem('selected_store', JSON.stringify(selectedStore));
+    } else {
+      localStorage.removeItem('selected_store');
+    }
+  }, [selectedStore]);
 
   const fetchProducts = async () => {
     try {
@@ -80,11 +94,27 @@ function App() {
           'Authorization': `Bearer ${token}`,
         },
       });
+
+      if (response.status === 401) {
+        setToken(null);
+        setCustomer(null);
+        setIsLoggedIn(false);
+        setMessage("Your session has expired. Please log in again.");
+        return;
+      }
+
       const data = await response.json();
-      if (data.success) {
-        setStores(data.stores);
+      if (data) {
+        let storeToSelect = data.find((store: Store) => store.name === 'Weusifix Logistics');
+        if (!storeToSelect) {
+          storeToSelect = data.find((store: Store) => store.store_id === 2);
+        }
+        if (storeToSelect) {
+          setSelectedStore(storeToSelect);
+        }
+        setStores(data);
       } else {
-        setMessage(data.error || 'Failed to fetch stores');
+        setMessage(data || 'Failed to fetch stores');
       }
     } catch (error: any) {
       setMessage(`Error fetching stores: ${error.message || 'An unknown error occurred.'}`);
@@ -125,7 +155,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}v`,
+          'Authorization': `Bearer ${token}`,
         },
       });
     } catch (error: any) {
@@ -133,6 +163,7 @@ function App() {
     } finally {
       setToken(null);
       setCustomer(null);
+      setSelectedStore(null);
       setMessage('Logout successful!');
       setIsLoggedIn(false);
     }
@@ -187,6 +218,13 @@ function App() {
             Logout
           </button>
 
+          {selectedStore && (
+            <div className="mt-8">
+              <h2 className="text-2xl font-semibold mb-4">Selected Store</h2>
+              <p className="text-gray-800"><a href={selectedStore.url}>{selectedStore.name}</a></p>
+            </div>
+          )}
+
           <h2 className="text-2xl font-semibold mt-8 mb-4">Products</h2>
           {products.length > 0 ? (
             <ul className="list-disc pl-5">
@@ -198,7 +236,7 @@ function App() {
             <p>No products found.</p>
           )}
 
-          <h2 className="text-2xl font-semibold mt-8 mb-4">Stores</h2>
+          <h2 className="text-2xl font-semibold mt-8 mb-4">All Stores</h2>
           {stores.length > 0 ? (
             <ul className="list-disc pl-5">
               {stores.map((store) => (
