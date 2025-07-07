@@ -31,6 +31,8 @@ function App() {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [message, setMessage] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     const storedToken = localStorage.getItem('customer_token');
@@ -52,7 +54,6 @@ function App() {
     if (token && customer) {
       localStorage.setItem('customer_token', token);
       localStorage.setItem('customer', JSON.stringify(customer));
-      fetchProducts();
       fetchStores();
     } else {
       localStorage.removeItem('customer_token');
@@ -63,27 +64,33 @@ function App() {
   useEffect(() => {
     if (selectedStore) {
       localStorage.setItem('selected_store', JSON.stringify(selectedStore));
+      fetchProducts(1);
     } else {
       localStorage.removeItem('selected_store');
     }
   }, [selectedStore]);
 
-  const fetchProducts = async () => {
+  const fetchProducts = async (page: number) => {
+    if (!selectedStore) return;
+    setIsLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/products`, {
+      const response = await fetch(`${API_BASE_URL}/products&page=${page}&limit=10&store_id=${selectedStore.store_id}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       });
       const data = await response.json();
-      if (data.success) {
+      if (data) {
         setProducts(data.products);
+        setCurrentPage(page);
       } else {
         setMessage(data.error || 'Failed to fetch products');
       }
     } catch (error: any) {
       setMessage(`Error fetching products: ${error.message || 'An unknown error occurred.'}`);
       console.error('Error fetching products:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -221,17 +228,36 @@ function App() {
           {selectedStore && (
             <div className="mt-8">
               <h2 className="text-2xl font-semibold mb-4">Selected Store</h2>
-              <p className="text-gray-800"><a href={selectedStore.url}>{selectedStore.name}</a></p>
+              <p className="text-gray-800">{selectedStore.name}</p>
             </div>
           )}
 
           <h2 className="text-2xl font-semibold mt-8 mb-4">Products</h2>
-          {products.length > 0 ? (
-            <ul className="list-disc pl-5">
-              {products.map((product) => (
-                <li key={product.product_id} className="text-gray-800">{product.name} - {product.price}</li>
-              ))}
-            </ul>
+          {isLoading ? (
+            <p>Loading products...</p>
+          ) : products.length > 0 ? (
+            <div>
+              <ul className="list-disc pl-5">
+                {products.map((product) => (
+                  <li key={product.product_id} className="text-gray-800">{product.name} - {product.price}</li>
+                ))}
+              </ul>
+              <div className="mt-4 flex justify-between" style={{ display: 'none' }}>
+                <button
+                  onClick={() => fetchProducts(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-l"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => fetchProducts(currentPage + 1)}
+                  className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-r"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           ) : (
             <p>No products found.</p>
           )}
