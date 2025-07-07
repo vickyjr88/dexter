@@ -3,6 +3,7 @@ import LoginForm from './components/LoginForm';
 import OrderForm from './components/OrderForm';
 import ProductList from './components/ProductList';
 import StoreInfo from './components/StoreInfo';
+import OrderList from './components/OrderList';
 
 const API_BASE_URL = '/api';
 
@@ -42,6 +43,15 @@ interface ErrandDetails {
   comment: string;
 }
 
+interface Order {
+  order_id: string;
+  name: string;
+  status: string;
+  date_added: string;
+  total: string;
+  products: Array<{ product_id: string; name: string; quantity: string; price: string; total: string; }>;
+}
+
 function App() {
   // Existing State
   const [products, setProducts] = useState<Product[]>([]);
@@ -61,6 +71,13 @@ function App() {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [paymentAddress, setPaymentAddress] = useState<PaymentAddress>({ firstname: '', lastname: '', address_1: '', city: '', zone: '', country: '', postcode: '' });
   const [errandDetails, setErrandDetails] = useState<ErrandDetails>({ pickup_location: '', dropoff_location: '', comment: '' });
+
+  // New State for Orders Screen
+  const [showOrdersScreen, setShowOrdersScreen] = useState(false);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersCurrentPage, setOrdersCurrentPage] = useState(1);
+  const [ordersTotalPages, setOrdersTotalPages] = useState(1);
+  const [isOrdersLoading, setIsOrdersLoading] = useState(false);
 
   // Effects
   useEffect(() => {
@@ -132,13 +149,6 @@ function App() {
         },
       });
 
-      if (response.status === 401) {
-        setToken(null);
-        setCustomer(null);
-        setIsLoggedIn(false);
-        setMessage("Your session has expired. Please log in again.");
-        return;
-      }
 
       const data = await response.json();
       if (data) {
@@ -156,6 +166,29 @@ function App() {
     } catch (error: any) {
       setMessage(`Error fetching stores: ${error.message || 'An unknown error occurred.'}`);
       console.error('Error fetching stores:', error);
+    }
+  };
+
+  const fetchOrders = async (page: number) => {
+    setIsOrdersLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/orders&page=${page}&limit=10`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      const data = await response.json();
+      if (data.orders) {
+        setOrders(data.orders);
+        setOrdersCurrentPage(data.pagination.current_page);
+        setOrdersTotalPages(data.pagination.total_pages);
+      } else {
+        setMessage(data.error || 'Failed to fetch orders');
+      }
+    } catch (error: any) {
+      setMessage(`Error fetching orders: ${error.message || 'An unknown error occurred.'}`);
+      console.error('Error fetching orders:', error);
+    } finally {
+      setIsOrdersLoading(false);
     }
   };
 
@@ -265,11 +298,29 @@ function App() {
           setErrandDetails={setErrandDetails}
           setIsPlacingOrder={setIsPlacingOrder}
         />
+      ) : showOrdersScreen ? (
+        <OrderList 
+          orders={orders} 
+          isLoading={isOrdersLoading} 
+          currentPage={ordersCurrentPage} 
+          totalPages={ordersTotalPages} 
+          fetchOrders={fetchOrders} 
+          onBack={() => setShowOrdersScreen(false)} 
+        />
       ) : (
         <div className="bg-white p-6 rounded shadow-md w-full max-w-md">
           <h2 className="text-2xl font-semibold mb-4">Welcome, {customer?.firstname}!</h2>
           <p className="mb-4">You are logged in.</p>
           <button onClick={handleLogout} className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Logout</button>
+          <button 
+            onClick={() => { 
+              setShowOrdersScreen(true);
+              fetchOrders(1);
+            }}
+            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ml-2"
+          >
+            View Orders
+          </button>
 
           <StoreInfo selectedStore={selectedStore} stores={stores} />
           <ProductList 
