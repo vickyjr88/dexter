@@ -9,7 +9,7 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '/index.php?route=extension/vdmnice/module'),
+        rewrite: (path) => path.replace(/^\/api/, '/index.php?route=extension/vdmnice/api'),
       },
     },
   },
