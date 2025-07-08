@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import LoginForm from './components/LoginForm';
 import OrderForm from './components/OrderForm';
 import ProductList from './components/ProductList';
@@ -123,7 +124,7 @@ function App() {
     if (!selectedStore) return;
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/products&page=${page}&limit=10&store_id=${selectedStore.store_id}`, {
+      const response = await axios.get(`${API_BASE_URL}/products&page=${page}&limit=10&store_id=${selectedStore.store_id}`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (response.status === 401) {
@@ -131,8 +132,7 @@ function App() {
         setMessage("Your session has expired. Please log in again.");
         return;
       }
-      const data = await response.json();
-      setProducts(data ? data.products : []);
+      setProducts(response.data ? response.data.products : []);
       setCurrentPage(page);
     } catch (error: any) {
       setMessage(`Error fetching products: ${error.message}`);
@@ -143,14 +143,14 @@ function App() {
 
   const fetchStores = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/stores`, {
+      const response = await axios.get(`${API_BASE_URL}/stores`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       });
 
 
-      const data = await response.json();
+      const data = response.data;
       if (data) {
         let storeToSelect = data.find((store: Store) => store.name === 'Weusifix Logistics');
         if (!storeToSelect) {
@@ -172,11 +172,11 @@ function App() {
   const fetchOrders = async (page: number) => {
     setIsOrdersLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/orders&page=${page}&limit=10`, {
+      const response = await axios.get(`${API_BASE_URL}/orders&page=${page}&limit=10`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
 
-      const data = await response.json();
+      const data = await response.data;
       if (data.orders) {
         setOrders(data.orders);
         setOrdersCurrentPage(data.pagination.current_page);
@@ -195,14 +195,14 @@ function App() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch(`${API_BASE_URL}/login`, {
-        method: 'POST',
+      const response = await axios.post(`${API_BASE_URL}/login`, {
+        email, password
+      }, {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password }),
       });
-      const data = await response.json();
+      const data = response.data;
       if (data.success) {
         setToken(data.customer_token);
         setCustomer(data.customer);
@@ -221,8 +221,7 @@ function App() {
 
   const handleLogout = async () => {
     try {
-      await fetch(`${API_BASE_URL}/logout`, {
-        method: 'POST',
+      await axios.post(`${API_BASE_URL}/logout`, null, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
@@ -256,13 +255,11 @@ function App() {
     };
 
     try {
-      const response = await fetch(`${API_BASE_URL}/custom_order`, {
-        method: 'POST',
+      const response = await axios.post(`${API_BASE_URL}/custom_order`, orderPayload, {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify(orderPayload),
       });
 
-      const data = await response.json();
+      const data = response.data;
       if (data.success) {
         setMessage('Order placed successfully!');
         setIsPlacingOrder(false);
