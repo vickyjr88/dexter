@@ -1,7 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import LoginForm from './components/LoginForm';
+import OrderForm from './components/OrderForm';
+import ProductList from './components/ProductList';
+import StoreInfo from './components/StoreInfo';
+import OrderList from './components/OrderList';
 
 const API_BASE_URL = '/api';
 
+// Interfaces
 interface Product {
   product_id: number;
   name: string;
@@ -13,51 +20,146 @@ interface Store {
   name: string;
 }
 
+interface Customer {
+  customer_id: string;
+  firstname: string;
+  lastname: string;
+  email: string;
+  telephone: string;
+}
+
+interface PaymentAddress {
+  firstname: string;
+  lastname: string;
+  address_1: string;
+  city: string;
+  zone: string;
+  country: string;
+  postcode: string;
+}
+
+interface ErrandDetails {
+  pickup_location: string;
+  dropoff_location: string;
+  comment: string;
+}
+
+interface Order {
+  order_id: string;
+  name: string;
+  status: string;
+  date_added: string;
+  total: string;
+  products: Array<{ product_id: string; name: string; quantity: string; price: string; total: string; }>;
+}
+
 function App() {
+  // Existing State
   const [products, setProducts] = useState<Product[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
+  const [selectedStore, setSelectedStore] = useState<Store | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [token, setToken] = useState<string | null>(null);
+  const [customer, setCustomer] = useState<Customer | null>(null);
   const [message, setMessage] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // New State for Order Placement
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [paymentAddress, setPaymentAddress] = useState<PaymentAddress>({ firstname: '', lastname: '', address_1: '', city: '', zone: '', country: '', postcode: '' });
+  const [errandDetails, setErrandDetails] = useState<ErrandDetails>({ pickup_location: '', dropoff_location: '', comment: '' });
+
+  // New State for Orders Screen
+  const [showOrdersScreen, setShowOrdersScreen] = useState(false);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersCurrentPage, setOrdersCurrentPage] = useState(1);
+  const [ordersTotalPages, setOrdersTotalPages] = useState(1);
+  const [isOrdersLoading, setIsOrdersLoading] = useState(false);
+
+  // Effects
+  useEffect(() => {
+    const storedToken = localStorage.getItem('customer_token');
+    const storedCustomer = localStorage.getItem('customer');
+    const storedStore = localStorage.getItem('selected_store');
+
+    if (storedToken && storedCustomer) {
+      const parsedCustomer = JSON.parse(storedCustomer);
+      setToken(storedToken);
+      setCustomer(parsedCustomer);
+      setIsLoggedIn(true);
+      setPaymentAddress(prev => ({ ...prev, firstname: parsedCustomer.firstname, lastname: parsedCustomer.lastname }));
+    }
+
+    if (storedStore) {
+      setSelectedStore(JSON.parse(storedStore));
+    }
+  }, []);
 
   useEffect(() => {
-    if (token) {
-      fetchProducts();
+    if (token && customer) {
+      localStorage.setItem('customer_token', token);
+      localStorage.setItem('customer', JSON.stringify(customer));
       fetchStores();
+    } else {
+      localStorage.removeItem('customer_token');
+      localStorage.removeItem('customer');
     }
-  }, [token]);
+  }, [token, customer]);
 
-  const fetchProducts = async () => {
+  useEffect(() => {
+    if (selectedStore) {
+      localStorage.setItem('selected_store', JSON.stringify(selectedStore));
+      fetchProducts(1);
+    } else {
+      localStorage.removeItem('selected_store');
+    }
+  }, [selectedStore]);
+
+  // API Functions
+  const fetchProducts = async (page: number) => {
+    if (!selectedStore) return;
+    setIsLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/products`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+      const response = await axios.get(`${API_BASE_URL}/products&page=${page}&limit=10&store_id=${selectedStore.store_id}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
       });
-      const data = await response.json();
-      if (data.success) {
-        setProducts(data.products);
-      } else {
-        setMessage(data.error || 'Failed to fetch products');
+      if (response.status === 401) {
+        handleLogout();
+        setMessage("Your session has expired. Please log in again.");
+        return;
       }
+      setProducts(response.data ? response.data.products : []);
+      setCurrentPage(page);
     } catch (error: any) {
-      setMessage(`Error fetching products: ${error.message || 'An unknown error occurred.'}`);
-      console.error('Error fetching products:', error);
+      setMessage(`Error fetching products: ${error.message}`);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const fetchStores = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/stores`, {
+      const response = await axios.get(`${API_BASE_URL}/stores`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       });
-      const data = await response.json();
-      if (data.success) {
-        setStores(data.stores);
+
+
+      const data = response.data;
+      if (data) {
+        let storeToSelect = data.find((store: Store) => store.name === 'Weusifix Logistics');
+        if (!storeToSelect) {
+          storeToSelect = data.find((store: Store) => store.store_id === 0);
+        }
+        if (storeToSelect) {
+          setSelectedStore(storeToSelect);
+        }
+        setStores(data);
       } else {
         setMessage(data.error || 'Failed to fetch stores');
       }
@@ -67,20 +169,43 @@ function App() {
     }
   };
 
+  const fetchOrders = async (page: number) => {
+    setIsOrdersLoading(true);
+    try {
+      const response = await axios.get(`${API_BASE_URL}/orders&page=${page}&limit=10`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      const data = await response.data;
+      if (data.orders) {
+        setOrders(data.orders);
+        setOrdersCurrentPage(data.pagination.current_page);
+        setOrdersTotalPages(data.pagination.total_pages);
+      } else {
+        setMessage(data.error || 'Failed to fetch orders');
+      }
+    } catch (error: any) {
+      setMessage(`Error fetching orders: ${error.message || 'An unknown error occurred.'}`);
+      console.error('Error fetching orders:', error);
+    } finally {
+      setIsOrdersLoading(false);
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch(`${API_BASE_URL}/login`, {
-        method: 'POST',
+      const response = await axios.post(`${API_BASE_URL}/login`, {
+        email, password
+      }, {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password }),
       });
-      const data = await response.json();
-      console.log('Login response:', data);
+      const data = response.data;
       if (data.success) {
-        setToken(data.token);
+        setToken(data.customer_token);
+        setCustomer(data.customer);
         setMessage('Login successful!');
         setIsLoggedIn(true);
       } else {
@@ -96,97 +221,112 @@ function App() {
 
   const handleLogout = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/logout`, {
-        method: 'POST',
+      await axios.post(`${API_BASE_URL}/logout`, null, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
       });
-      const data = await response.json();
+    } catch (error: any) {
+      console.error('Error during logout API call:', error);
+    } finally {
+      setToken(null);
+      setCustomer(null);
+      setSelectedStore(null);
+      setMessage('Logout successful!');
+      setIsLoggedIn(false);
+    }
+  };
+
+  const handleSelectProduct = (product: Product) => {
+    setSelectedProduct(product);
+    setIsPlacingOrder(true);
+  };
+
+  const handlePlaceOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProduct || !customer) return;
+
+    const orderPayload = {
+      products: [{ product_id: selectedProduct.product_id, quantity: 1 }],
+      customer,
+      payment_address: paymentAddress,
+      errand_details: errandDetails,
+    };
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/custom_order`, orderPayload, {
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      });
+
+      const data = response.data;
       if (data.success) {
-        setToken(null);
-        setMessage('Logout successful!');
-        setIsLoggedIn(false);
+        setMessage('Order placed successfully!');
+        setIsPlacingOrder(false);
+        setSelectedProduct(null);
       } else {
-        setMessage(data.error || 'Logout failed');
+        setMessage(data.error?.message || 'Failed to place order');
       }
     } catch (error: any) {
-      setMessage(`Error during logout: ${error.message || 'An unknown error occurred.'}`);
-      console.error('Error during logout:', error);
+      setMessage(`Error placing order: ${error.message}`);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
-      <h1 className="text-4xl font-bold text-blue-600 mb-8">OpenCart API Client</h1>
-
+    <div className="min-h-screen bg-gray-100 flex flex-col items-center p-4">
+      <h1 className="text-4xl font-bold text-blue-600 mb-8">Dexter</h1>
       {message && <p className="text-red-500 mb-4">{message}</p>}
 
       {!isLoggedIn ? (
-        <form onSubmit={handleLogin} className="bg-white p-6 rounded shadow-md w-full max-w-sm">
-          <h2 className="text-2xl font-semibold mb-4">Login</h2>
-          <div className="mb-4">
-            <label htmlFor="email" className="block text-gray-700 text-sm font-bold mb-2">Email:</label>
-            <input
-              type="email"
-              id="email"
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <div className="mb-6">
-            <label htmlFor="password" className="block text-gray-700 text-sm font-bold mb-2">Password:</label>
-            <input
-              type="password"
-              id="password"
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          <button
-            type="submit"
-            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-          >
-            Login
-          </button>
-        </form>
+        <LoginForm 
+          handleLogin={handleLogin} 
+          email={email} 
+          setEmail={setEmail} 
+          password={password} 
+          setPassword={setPassword} 
+        />
+      ) : isPlacingOrder && selectedProduct ? (
+        <OrderForm 
+          selectedProduct={selectedProduct}
+          handlePlaceOrder={handlePlaceOrder}
+          paymentAddress={paymentAddress}
+          setPaymentAddress={setPaymentAddress}
+          errandDetails={errandDetails}
+          setErrandDetails={setErrandDetails}
+          setIsPlacingOrder={setIsPlacingOrder}
+        />
+      ) : showOrdersScreen ? (
+        <OrderList 
+          orders={orders} 
+          isLoading={isOrdersLoading} 
+          currentPage={ordersCurrentPage} 
+          totalPages={ordersTotalPages} 
+          fetchOrders={fetchOrders} 
+          onBack={() => setShowOrdersScreen(false)} 
+        />
       ) : (
         <div className="bg-white p-6 rounded shadow-md w-full max-w-md">
-          <h2 className="text-2xl font-semibold mb-4">Welcome!</h2>
-          <p className="mb-4">You are logged in. Your token: {token}</p>
-          <button
-            onClick={handleLogout}
-            className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+          <h2 className="text-2xl font-semibold mb-4">Welcome, {customer?.firstname}!</h2>
+          <p className="mb-4">You are logged in.</p>
+          <button onClick={handleLogout} className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Logout</button>
+          <button 
+            onClick={() => { 
+              setShowOrdersScreen(true);
+              fetchOrders(1);
+            }}
+            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ml-2"
           >
-            Logout
+            View Orders
           </button>
 
-          <h2 className="text-2xl font-semibold mt-8 mb-4">Products</h2>
-          {products.length > 0 ? (
-            <ul className="list-disc pl-5">
-              {products.map((product) => (
-                <li key={product.product_id} className="text-gray-800">{product.name} - {product.price}</li>
-              ))}
-            </ul>
-          ) : (
-            <p>No products found.</p>
-          )}
-
-          <h2 className="text-2xl font-semibold mt-8 mb-4">Stores</h2>
-          {stores.length > 0 ? (
-            <ul className="list-disc pl-5">
-              {stores.map((store) => (
-                <li key={store.store_id} className="text-gray-800">{store.name}</li>
-              ))}
-            </ul>
-          ) : (
-            <p>No stores found.</p>
-          )}
+          <StoreInfo selectedStore={selectedStore} stores={stores} />
+          <ProductList 
+            products={products} 
+            isLoading={isLoading} 
+            handleSelectProduct={handleSelectProduct} 
+            fetchProducts={fetchProducts} 
+            currentPage={currentPage} 
+          />
         </div>
       )}
     </div>
